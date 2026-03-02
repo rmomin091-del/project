@@ -1,6 +1,12 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import Navbar from '../components/Navbar';
+import StatusCards from '../components/StatusCards';
+import Charts from '../components/Charts';
+import IssuesTable from '../components/IssuesTable';
+import IssueDetail from '../components/IssueDetail';
+import CreateIssueModal from '../components/CreateIssueModal';
 
 // ─── API Helpers ───────────────────────────────────────────────
 const API = '/api';
@@ -278,146 +284,85 @@ export default function HomePage() {
 
   const formatDate = (d) => new Date(d).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
+  // ─── Render Helpers ────────────────────────────────────────
+  function AddCommentForm({ issueId, teamMembers, onCommentAdded, addToast }) {
+    const [author, setAuthor] = useState('');
+    const [text, setText] = useState('');
+    const [submitting, setSubmitting] = useState(false);
+
+    const handleSubmit = async (e) => {
+      e.preventDefault();
+      if (!author || !text.trim()) {
+        addToast('Author and comment text are required', 'error');
+        return;
+      }
+      setSubmitting(true);
+      try {
+        const comment = await postJSON(`${API}/issues/${issueId}/comments`, { author, text });
+        onCommentAdded(comment);
+        setText('');
+      } catch (err) {
+        addToast(err.message, 'error');
+      } finally {
+        setSubmitting(false);
+      }
+    };
+
+    return (
+      <form className="comment-form" onSubmit={handleSubmit}>
+        <div className="detail-section-title">Add Comment</div>
+        <div className="comment-form-actions">
+          <select className="form-select" value={author} onChange={(e) => setAuthor(e.target.value)} style={{ flex: 1 }}>
+            <option value="">Select author</option>
+            {teamMembers.map((m) => <option key={m} value={m}>{m}</option>)}
+          </select>
+        </div>
+        <textarea placeholder="Write your comment..." value={text} onChange={(e) => setText(e.target.value)} />
+        <div>
+          <button type="submit" className="btn-primary btn-sm" disabled={submitting}>
+            {submitting ? 'Posting...' : 'Post Comment'}
+          </button>
+        </div>
+      </form>
+    );
+  }
+
   if (loading) {
     return <div className="loading-overlay"><div className="spinner"></div><span>Loading...</span></div>;
   }
 
   return (
     <div className="app-container">
-      {/* Navbar */}
-      <nav className="navbar">
-        <div className="navbar-inner">
-          <div className="navbar-brand">
-            <div className="icon">🐛</div>
-            <span>Issue Tracker</span>
-          </div>
-          <div className="navbar-actions">
-            <button className="btn-icon" onClick={() => setShowCharts(!showCharts)} title="Toggle Charts">
-              📊
-            </button>
-            <button className="btn-icon" onClick={handleExportCSV} title="Export CSV">
-              📥
-            </button>
-            <button className="btn-icon" onClick={toggleDarkMode} title="Toggle Dark Mode">
-              {darkMode ? '☀️' : '🌙'}
-            </button>
-            <button className="btn btn-primary" onClick={() => setShowCreateModal(true)}>
-              + New Issue
-            </button>
-          </div>
-        </div>
-      </nav>
+      <Navbar
+        darkMode={darkMode}
+        toggleDarkMode={toggleDarkMode}
+        showCharts={showCharts}
+        setShowCharts={setShowCharts}
+        handleExportCSV={handleExportCSV}
+        setShowCreateModal={setShowCreateModal}
+      />
 
-      {/* Main Content */}
       <main className="main-content">
-        {/* Status Cards */}
-        <div className="status-cards">
-          <div className="status-card total">
-            <div className="status-card-label">Total</div>
-            <div className="status-card-count">{counts.Total || 0}</div>
-          </div>
-          <div className="status-card open">
-            <div className="status-card-label">Open</div>
-            <div className="status-card-count">{counts.Open || 0}</div>
-          </div>
-          <div className="status-card in-progress">
-            <div className="status-card-label">In Progress</div>
-            <div className="status-card-count">{counts['In Progress'] || 0}</div>
-          </div>
-          <div className="status-card resolved">
-            <div className="status-card-label">Resolved</div>
-            <div className="status-card-count">{counts.Resolved || 0}</div>
-          </div>
-          <div className="status-card closed">
-            <div className="status-card-label">Closed</div>
-            <div className="status-card-count">{counts.Closed || 0}</div>
-          </div>
-        </div>
+        <StatusCards counts={counts} />
 
-        {/* Charts */}
-        {showCharts && (
-          <div className="charts-grid">
-            <div className="chart-card">
-              <h3>Issues by Project</h3>
-              <div className="chart-container"><canvas ref={projectChartRef}></canvas></div>
-            </div>
-            <div className="chart-card">
-              <h3>Issues by Priority</h3>
-              <div className="chart-container"><canvas ref={priorityChartRef}></canvas></div>
-            </div>
-          </div>
-        )}
+        <Charts
+          showCharts={showCharts}
+          projectChartRef={projectChartRef}
+          priorityChartRef={priorityChartRef}
+        />
 
-        {/* Filters */}
-        <div className="filters-bar">
-          <div className="search-input-wrapper">
-            <span className="search-icon">🔍</span>
-            <input
-              type="text"
-              className="search-input"
-              placeholder="Search by title or description..."
-              value={filters.search}
-              onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-            />
-          </div>
-          <select className="filter-select" value={filters.project} onChange={(e) => setFilters({ ...filters, project: e.target.value })}>
-            <option value="">All Projects</option>
-            {constants.projects.map((p) => <option key={p} value={p}>{p}</option>)}
-          </select>
-          <select className="filter-select" value={filters.priority} onChange={(e) => setFilters({ ...filters, priority: e.target.value })}>
-            <option value="">All Priorities</option>
-            {constants.priorities.map((p) => <option key={p} value={p}>{p}</option>)}
-          </select>
-          <select className="filter-select" value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })}>
-            <option value="">All Statuses</option>
-            {constants.statuses.map((s) => <option key={s} value={s}>{s}</option>)}
-          </select>
-          <select className="filter-select" value={filters.assignee} onChange={(e) => setFilters({ ...filters, assignee: e.target.value })}>
-            <option value="">All Assignees</option>
-            {constants.teamMembers.map((m) => <option key={m} value={m}>{m}</option>)}
-          </select>
-        </div>
-
-        {/* Issues Table */}
-        <div className="issues-table-wrapper">
-          {issues.length === 0 ? (
-            <div className="empty-state">
-              <div className="icon">📋</div>
-              <p>No issues found</p>
-              <p style={{ fontSize: '0.85rem' }}>Try adjusting your filters or create a new issue</p>
-            </div>
-          ) : (
-            <table className="issues-table">
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>Title</th>
-                  <th>Project</th>
-                  <th>Priority</th>
-                  <th>Assignee</th>
-                  <th>Status</th>
-                  <th>Created</th>
-                </tr>
-              </thead>
-              <tbody>
-                {issues.map((issue) => (
-                  <tr key={issue.id} onClick={() => openIssueDetail(issue)}>
-                    <td className="issue-id-cell">#{issue.id}</td>
-                    <td className="issue-title-cell">{issue.title}</td>
-                    <td>{issue.project}</td>
-                    <td><span className={getPriorityBadgeClass(issue.priority)}><span className="badge-dot"></span>{issue.priority}</span></td>
-                    <td>{issue.assignee}</td>
-                    <td><span className={getStatusBadgeClass(issue.status)}><span className="badge-dot"></span>{issue.status}</span></td>
-                    <td style={{ color: 'var(--text-tertiary)', fontSize: '0.8rem' }}>{formatDate(issue.created_at)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
+        <IssuesTable
+          issues={issues}
+          filters={filters}
+          setFilters={setFilters}
+          constants={constants}
+          onIssueClick={openIssueDetail}
+          formatDate={formatDate}
+          getPriorityBadgeClass={getPriorityBadgeClass}
+          getStatusBadgeClass={getStatusBadgeClass}
+        />
       </main>
 
-      {/* Create Issue Modal */}
       {showCreateModal && (
         <CreateIssueModal
           constants={constants}
@@ -429,81 +374,27 @@ export default function HomePage() {
             addToast('Issue created successfully!', 'success');
           }}
           addToast={addToast}
+          postJSON={postJSON}
+          API={API}
         />
       )}
 
-      {/* Issue Detail Side Panel */}
-      {selectedIssue && (
-        <>
-          <div className="detail-overlay" onClick={closeDetail}></div>
-          <div className="detail-panel">
-            <div className="detail-header">
-              <h2>#{selectedIssue.id} {selectedIssue.title}</h2>
-              <button className="btn-icon" onClick={closeDetail}>✕</button>
-            </div>
-            <div className="detail-body">
-              {/* Meta */}
-              <div className="detail-meta">
-                <div className="detail-meta-item">
-                  <span className="detail-meta-label">Project</span>
-                  <span className="detail-meta-value">{selectedIssue.project}</span>
-                </div>
-                <div className="detail-meta-item">
-                  <span className="detail-meta-label">Priority</span>
-                  <span className={getPriorityBadgeClass(selectedIssue.priority)}><span className="badge-dot"></span>{selectedIssue.priority}</span>
-                </div>
-                <div className="detail-meta-item">
-                  <span className="detail-meta-label">Assignee</span>
-                  <span className="detail-meta-value">{selectedIssue.assignee}</span>
-                </div>
-                <div className="detail-meta-item">
-                  <span className="detail-meta-label">Created</span>
-                  <span className="detail-meta-value">{formatDate(selectedIssue.created_at)}</span>
-                </div>
-              </div>
-
-              {/* Description */}
-              <div className="detail-description">{selectedIssue.description}</div>
-
-              {/* Status Change */}
-              <div className="detail-section-title">Change Status</div>
-              <div className="status-change-bar">
-                {['Open', 'In Progress', 'Resolved', 'Closed'].map((s) => (
-                  <button key={s} className={getStatusBtnClass(s, selectedIssue.status)} onClick={() => handleStatusChange(s)}>
-                    {s}
-                  </button>
-                ))}
-              </div>
-
-              {/* Comments */}
-              <div className="detail-section-title">Comments ({comments.length})</div>
-              <div className="comments-list">
-                {comments.length === 0 && <p style={{ color: 'var(--text-tertiary)', fontSize: '0.85rem' }}>No comments yet</p>}
-                {comments.map((c) => (
-                  <div key={c.id} className="comment-item">
-                    <div className="comment-header">
-                      <span className="comment-author">{c.author}</span>
-                      <span className="comment-time">{formatDate(c.created_at)}</span>
-                    </div>
-                    <div className="comment-text">{c.text}</div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Add Comment */}
-              <AddCommentForm
-                issueId={selectedIssue.id}
-                teamMembers={constants.teamMembers}
-                onCommentAdded={(comment) => {
-                  setComments((prev) => [...prev, comment]);
-                  addToast('Comment added', 'success');
-                }}
-                addToast={addToast}
-              />
-            </div>
-          </div>
-        </>
-      )}
+      <IssueDetail
+        issue={selectedIssue}
+        comments={comments}
+        onClose={closeDetail}
+        handleStatusChange={handleStatusChange}
+        formatDate={formatDate}
+        getPriorityBadgeClass={getPriorityBadgeClass}
+        getStatusBtnClass={getStatusBtnClass}
+        AddCommentForm={AddCommentForm}
+        constants={constants}
+        onCommentAdded={(comment) => {
+          setComments((prev) => [...prev, comment]);
+          addToast('Comment added', 'success');
+        }}
+        addToast={addToast}
+      />
 
       {/* Toast Container */}
       <div className="toast-container">
@@ -514,145 +405,5 @@ export default function HomePage() {
         ))}
       </div>
     </div>
-  );
-}
-
-// ─── Create Issue Modal ─────────────────────────────────────
-function CreateIssueModal({ constants, onClose, onCreated, addToast }) {
-  const [form, setForm] = useState({ title: '', description: '', project: '', priority: '', assignee: '', status: 'Open' });
-  const [errors, setErrors] = useState({});
-  const [submitting, setSubmitting] = useState(false);
-
-  const validate = () => {
-    const e = {};
-    if (!form.title.trim()) e.title = 'Title is required';
-    if (!form.description.trim()) e.description = 'Description is required';
-    if (!form.project) e.project = 'Project is required';
-    if (!form.priority) e.priority = 'Priority is required';
-    if (!form.assignee) e.assignee = 'Assignee is required';
-    setErrors(e);
-    return Object.keys(e).length === 0;
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!validate()) return;
-    setSubmitting(true);
-    try {
-      await postJSON(`${API}/issues`, form);
-      onCreated();
-    } catch (err) {
-      addToast(err.message, 'error');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <h2>Create New Issue</h2>
-          <button className="btn-icon" onClick={onClose}>✕</button>
-        </div>
-        <form onSubmit={handleSubmit}>
-          <div className="modal-body">
-            <div className="form-group">
-              <label className="form-label">Title *</label>
-              <input className="form-input" type="text" placeholder="Brief summary of the issue" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
-              {errors.title && <div className="form-error">{errors.title}</div>}
-            </div>
-            <div className="form-group">
-              <label className="form-label">Description *</label>
-              <textarea className="form-textarea" placeholder="Detailed description of the issue..." value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
-              {errors.description && <div className="form-error">{errors.description}</div>}
-            </div>
-            <div className="form-row">
-              <div className="form-group">
-                <label className="form-label">Project *</label>
-                <select className="form-select" value={form.project} onChange={(e) => setForm({ ...form, project: e.target.value })}>
-                  <option value="">Select project</option>
-                  {constants.projects.map((p) => <option key={p} value={p}>{p}</option>)}
-                </select>
-                {errors.project && <div className="form-error">{errors.project}</div>}
-              </div>
-              <div className="form-group">
-                <label className="form-label">Priority *</label>
-                <select className="form-select" value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })}>
-                  <option value="">Select priority</option>
-                  {constants.priorities.map((p) => <option key={p} value={p}>{p}</option>)}
-                </select>
-                {errors.priority && <div className="form-error">{errors.priority}</div>}
-              </div>
-            </div>
-            <div className="form-row">
-              <div className="form-group">
-                <label className="form-label">Assignee *</label>
-                <select className="form-select" value={form.assignee} onChange={(e) => setForm({ ...form, assignee: e.target.value })}>
-                  <option value="">Select assignee</option>
-                  {constants.teamMembers.map((m) => <option key={m} value={m}>{m}</option>)}
-                </select>
-                {errors.assignee && <div className="form-error">{errors.assignee}</div>}
-              </div>
-              <div className="form-group">
-                <label className="form-label">Status</label>
-                <select className="form-select" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
-                  {constants.statuses.map((s) => <option key={s} value={s}>{s}</option>)}
-                </select>
-              </div>
-            </div>
-          </div>
-          <div className="modal-footer">
-            <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
-            <button type="submit" className="btn btn-primary" disabled={submitting}>
-              {submitting ? <><span className="spinner"></span> Creating...</> : 'Create Issue'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-// ─── Add Comment Form ───────────────────────────────────────
-function AddCommentForm({ issueId, teamMembers, onCommentAdded, addToast }) {
-  const [author, setAuthor] = useState('');
-  const [text, setText] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!author || !text.trim()) {
-      addToast('Author and comment text are required', 'error');
-      return;
-    }
-    setSubmitting(true);
-    try {
-      const comment = await postJSON(`${API}/issues/${issueId}/comments`, { author, text });
-      onCommentAdded(comment);
-      setText('');
-    } catch (err) {
-      addToast(err.message, 'error');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <form className="comment-form" onSubmit={handleSubmit}>
-      <div className="detail-section-title">Add Comment</div>
-      <div className="comment-form-actions">
-        <select className="form-select" value={author} onChange={(e) => setAuthor(e.target.value)} style={{ flex: 1 }}>
-          <option value="">Select author</option>
-          {teamMembers.map((m) => <option key={m} value={m}>{m}</option>)}
-        </select>
-      </div>
-      <textarea placeholder="Write your comment..." value={text} onChange={(e) => setText(e.target.value)} />
-      <div>
-        <button type="submit" className="btn btn-primary btn-sm" disabled={submitting}>
-          {submitting ? 'Posting...' : 'Post Comment'}
-        </button>
-      </div>
-    </form>
   );
 }
