@@ -12,15 +12,27 @@ import CreateIssueModal from '../components/CreateIssueModal';
 const API = '/api';
 
 async function fetchJSON(url) {
-  const res = await fetch(url);
+  const token = localStorage.getItem('token');
+  const res = await fetch(url, {
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+  if (res.status === 401) {
+    localStorage.removeItem('token');
+    window.location.href = '/login';
+    return;
+  }
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }
 
 async function postJSON(url, data) {
+  const token = localStorage.getItem('token');
   const res = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
     body: JSON.stringify(data),
   });
   const json = await res.json();
@@ -29,9 +41,13 @@ async function postJSON(url, data) {
 }
 
 async function patchJSON(url, data) {
+  const token = localStorage.getItem('token');
   const res = await fetch(url, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
     body: JSON.stringify(data),
   });
   const json = await res.json();
@@ -57,6 +73,7 @@ export default function HomePage() {
   const [darkMode, setDarkMode] = useState(false);
   const [toasts, setToasts] = useState([]);
   const [showCharts, setShowCharts] = useState(false);
+  const [user, setUser] = useState(null);
 
   const projectChartRef = useRef(null);
   const priorityChartRef = useRef(null);
@@ -116,20 +133,29 @@ export default function HomePage() {
   useEffect(() => {
     const init = async () => {
       try {
+        const token = localStorage.getItem('token');
+        if (!token) {
+          router.push('/login');
+          return;
+        }
+
+        const savedUser = localStorage.getItem('user');
+        if (savedUser) setUser(JSON.parse(savedUser));
+
         const savedTheme = localStorage.getItem('theme') || 'light';
         setDarkMode(savedTheme === 'dark');
         document.documentElement.setAttribute('data-theme', savedTheme);
 
         const c = await fetchJSON(`${API}/constants`);
-        setConstants(c);
+        if (c) setConstants(c);
       } catch (err) {
-        addToast('Failed to connect to server', 'error');
+        addToast('Session expired or failed to connect', 'error');
       } finally {
         setLoading(false);
       }
     };
     init();
-  }, [addToast]);
+  }, [addToast, router]);
 
   useEffect(() => {
     if (!loading) fetchIssues();
@@ -328,7 +354,7 @@ export default function HomePage() {
   }
 
   if (loading) {
-    return <div className="loading-overlay"><div className="spinner"></div><span>Loading...</span></div>;
+    return <div className="loading-overlay"><div className="spinner"></div><span>Checking session...</span></div>;
   }
 
   return (
@@ -340,6 +366,7 @@ export default function HomePage() {
         setShowCharts={setShowCharts}
         handleExportCSV={handleExportCSV}
         setShowCreateModal={setShowCreateModal}
+        user={user}
       />
 
       <main className="main-content">

@@ -6,8 +6,14 @@ export default function Navbar({
     showCharts,
     setShowCharts,
     handleExportCSV,
-    setShowCreateModal
+    setShowCreateModal,
+    user
 }) {
+    const logout = () => {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        window.location.href = '/login';
+    };
     return (
         <nav className="navbar">
             <div className="navbar-inner">
@@ -15,6 +21,13 @@ export default function Navbar({
                     <div className="icon">🐛</div>
                     <span>Issue Tracker</span>
                 </div>
+
+                {user && (
+                    <div className="user-info">
+                        <span className="user-greeting">Welcome, <strong>{user.username}</strong></span>
+                        <button className="btn-text" onClick={logout}>Logout</button>
+                    </div>
+                )}
                 <div className="navbar-actions">
                     <button
                         className="btn-icon"
